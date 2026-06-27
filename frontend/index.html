@@ -22,16 +22,17 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <section class="lg:col-span-2">
-        <h2 class="text-lg font-semibold mb-3 text-slate-300">Lights</h2>
+        <h2 class="text-lg font-semibold mb-3 text-slate-300">Lights & Patterns</h2>
         <div id="lights" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
 
         <div class="mt-6 bg-slate-800/50 border border-slate-700 rounded p-4 text-xs text-slate-400">
-          <div class="font-semibold text-slate-300 mb-2">Trigger from an external service (curl)</div>
-          <pre class="bg-slate-900 p-3 rounded overflow-x-auto text-slate-300">curl -X POST http://localhost:3001/api/lights/1/toggle \
+          <div class="font-semibold text-slate-300 mb-2">Trigger a pattern from an external service (curl)</div>
+          <pre class="bg-slate-900 p-3 rounded overflow-x-auto text-slate-300">curl -X POST http://localhost:3001/api/lights/1/pattern \
   -H "Content-Type: application/json" \
   -H "X-Source: external-api" \
-  -d '{"state":"on"}'</pre>
-          <div class="mt-2">It will appear in the event feed instantly with the <span class="text-orange-300 font-mono">external-api</span> badge.</div>
+  -d '{"pattern":"blink"}'</pre>
+          <div class="mt-2">Valid patterns: <code class="text-slate-300">off · on · blink · fast_blink · heartbeat · strobe · sos</code></div>
+          <div class="mt-1">It will appear in the event feed instantly with the <span class="text-orange-300 font-mono">external-api</span> badge.</div>
         </div>
       </section>
 
@@ -45,6 +46,16 @@
 <script>
 const API_BASE = '';
 const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+
+const PATTERNS = ['off', 'on', 'blink', 'fast_blink', 'heartbeat', 'strobe', 'sos'];
+const PATTERN_LABEL = {
+  off: 'Off', on: 'On', blink: 'Blink', fast_blink: 'Fast Blink',
+  heartbeat: 'Heartbeat', strobe: 'Strobe', sos: 'SOS',
+};
+const PATTERN_ICON = {
+  off: '⚫', on: '💡', blink: '✨', fast_blink: '⚡',
+  heartbeat: '💓', strobe: '🌟', sos: '🆘',
+};
 
 const lightsEl = document.getElementById('lights');
 const eventsEl = document.getElementById('events');
@@ -64,24 +75,28 @@ function sourceBadge(source) {
 
 function renderLights() {
   lightsEl.innerHTML = lights.map(l => {
-    const on = l.state === 'on';
+    const active = l.pattern || 'off';
+    const isOff = active === 'off';
+    const icon = PATTERN_ICON[active] || '💡';
     return `
-      <div class="bg-slate-800 rounded-lg p-5 border ${on ? 'border-yellow-500/50 shadow-lg shadow-yellow-500/10' : 'border-slate-700'} transition">
-        <div class="flex items-center justify-between mb-4">
+      <div class="bg-slate-800 rounded-lg p-5 border ${isOff ? 'border-slate-700' : 'border-yellow-500/50 shadow-lg shadow-yellow-500/10'} transition">
+        <div class="flex items-center justify-between mb-3">
           <div>
             <div class="text-lg font-semibold">${l.name}</div>
             <div class="text-xs text-slate-400 font-mono">id: ${l.id}</div>
           </div>
-          <div class="text-4xl">${on ? '💡' : '⚫'}</div>
+          <div class="text-4xl">${icon}</div>
         </div>
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-bold ${on ? 'text-yellow-300' : 'text-slate-500'}">
-            ${l.state.toUpperCase()}
-          </span>
-          <button onclick="toggleLight(${l.id})"
-            class="${on ? 'bg-yellow-500 hover:bg-yellow-400 text-slate-900' : 'bg-slate-600 hover:bg-slate-500 text-white'} px-4 py-1.5 rounded font-semibold transition">
-            Toggle
-          </button>
+        <div class="text-xs text-slate-400 mb-2">
+          Current: <span class="text-yellow-300 font-mono">${PATTERN_LABEL[active] || active}</span>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          ${PATTERNS.map(p => `
+            <button onclick="setPattern(${l.id}, '${p}')"
+              class="${active === p ? 'bg-yellow-500 text-slate-900' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'} text-xs px-2.5 py-1 rounded font-medium transition">
+              ${PATTERN_LABEL[p]}
+            </button>
+          `).join('')}
         </div>
       </div>`;
   }).join('');
@@ -90,11 +105,13 @@ function renderLights() {
 function renderEvent(ev) {
   const time = new Date(ev.created_at).toLocaleTimeString();
   const ok = ev.arduino_ok ? '' : ' <span class="text-red-400">⚠ arduino unreachable</span>';
+  const icon = PATTERN_ICON[ev.pattern] || '💡';
+  const label = PATTERN_LABEL[ev.pattern] || ev.pattern || '?';
   const item = document.createElement('div');
   item.className = 'bg-slate-800 border border-slate-700 rounded p-3 text-sm';
   item.innerHTML = `
     <div class="flex items-center justify-between mb-1">
-      <div>${ev.state === 'on' ? '💡' : '⚫'} Light ${ev.light_id} → <b>${ev.state.toUpperCase()}</b>${ok}</div>
+      <div>${icon} Light ${ev.light_id} → <b>${label}</b>${ok}</div>
       <div class="text-xs text-slate-500">${time}</div>
     </div>
     <div class="flex items-center gap-2 text-xs text-slate-400">
@@ -105,11 +122,11 @@ function renderEvent(ev) {
   while (eventsEl.children.length > 50) eventsEl.lastChild.remove();
 }
 
-async function toggleLight(id) {
-  await fetch(`${API_BASE}/api/lights/${id}/toggle`, {
+async function setPattern(id, pattern) {
+  await fetch(`${API_BASE}/api/lights/${id}/pattern`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Source': 'dashboard' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ pattern }),
   });
 }
 

@@ -64,34 +64,48 @@ Stop everything: `Ctrl+C` once.
 
 ---
 
+## Patterns
+
+| Pattern       | What it does                          |
+|---------------|---------------------------------------|
+| `off`         | LED solid off                          |
+| `on`          | LED solid on                           |
+| `blink`       | 1 Hz blink (500 ms on / 500 ms off)    |
+| `fast_blink`  | 5 Hz blink (100 ms on / 100 ms off)    |
+| `heartbeat`   | Double-pulse, ~1 s cycle               |
+| `strobe`      | 10 Hz strobe                           |
+| `sos`         | Morse SOS                              |
+
 ## Try it
 
-**From the dashboard:** click Toggle. The Uno's on-board LED flips. The event
-feed shows a new entry with a blue `dashboard` badge.
+**From the dashboard:** click any pattern pill on the light card. The Uno's
+on-board LED switches to that pattern. The event feed shows a new entry with a
+blue `dashboard` badge.
 
 **From an external service** (simulate a 3rd-party API call):
 
 ```bash
-curl -X POST http://localhost:3001/api/lights/1/toggle \
+curl -X POST http://localhost:3001/api/lights/1/pattern \
   -H "Content-Type: application/json" \
   -H "X-Source: external-api" \
-  -d '{"state":"on"}'
+  -d '{"pattern":"sos"}'
 ```
 
-The dashboard updates instantly — orange `external-api` badge, light turns on,
-real LED follows.
+The dashboard updates instantly — orange `external-api` badge, the pattern's
+pill turns yellow on the card, real LED starts blinking SOS.
 
 ---
 
 ## API
 
-| Method | Path                       | What it does |
-|--------|----------------------------|--------------|
-| GET    | `/api/lights`              | Current state of all lights |
-| GET    | `/api/events`              | Last 200 trigger events |
-| POST   | `/api/lights/:id/toggle`   | Toggle or set. Body: `{"state":"on"\|"off"}`. Header `X-Source: your-name` tags the trigger. |
-| GET    | `/ws`                      | WebSocket — pushes live event updates |
-| GET    | `/api/health`              | Health + bridge status |
+| Method | Path                        | What it does |
+|--------|-----------------------------|--------------|
+| GET    | `/api/patterns`             | List of valid pattern names |
+| GET    | `/api/lights`               | Current state of all lights (includes `pattern`) |
+| GET    | `/api/events`               | Last 200 trigger events |
+| POST   | `/api/lights/:id/pattern`   | Set a pattern. Body: `{"pattern":"blink"}`. Header `X-Source: your-name` tags the trigger. |
+| GET    | `/ws`                       | WebSocket — pushes live event updates |
+| GET    | `/api/health`               | Health + bridge status |
 
 ---
 
