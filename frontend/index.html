@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arduino Lighting Control Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  <div class="max-w-6xl mx-auto p-6">
+    <header class="mb-8 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-3xl font-bold">💡 Lighting Control Center</h1>
+        <p class="text-slate-400 text-sm mt-1">
+          Backend: <span id="status" class="text-yellow-300">connecting…</span>
+        </p>
+      </div>
+      <div class="text-xs text-slate-400 bg-slate-800 px-3 py-2 rounded border border-slate-700 font-mono">
+        Your source tag: <span class="text-blue-400">dashboard</span>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <section class="lg:col-span-2">
+        <h2 class="text-lg font-semibold mb-3 text-slate-300">Lights</h2>
+        <div id="lights" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+
+        <div class="mt-6 bg-slate-800/50 border border-slate-700 rounded p-4 text-xs text-slate-400">
+          <div class="font-semibold text-slate-300 mb-2">Trigger from an external service (curl)</div>
+          <pre class="bg-slate-900 p-3 rounded overflow-x-auto text-slate-300">curl -X POST http://localhost:3001/api/lights/1/toggle \
+  -H "Content-Type: application/json" \
+  -H "X-Source: external-api" \
+  -d '{"state":"on"}'</pre>
+          <div class="mt-2">It will appear in the event feed instantly with the <span class="text-orange-300 font-mono">external-api</span> badge.</div>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold mb-3 text-slate-300">Live Event Feed</h2>
+        <div id="events" class="space-y-2 max-h-[75vh] overflow-y-auto pr-1"></div>
+      </section>
+    </div>
+  </div>
+
+<script>
+const API_BASE = '';
+const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+
+const lightsEl = document.getElementById('lights');
+const eventsEl = document.getElementById('events');
+const statusEl = document.getElementById('status');
+
+let lights = [];
+
+function sourceBadge(source) {
+  const map = {
+    'dashboard':    'bg-blue-500/20 text-blue-300 border-blue-500/40',
+    'external-api': 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+    'automation':   'bg-green-500/20 text-green-300 border-green-500/40',
+  };
+  const cls = map[source] || 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+  return `<span class="text-xs px-2 py-0.5 rounded border ${cls} font-mono">${source}</span>`;
+}
+
+function renderLights() {
+  lightsEl.innerHTML = lights.map(l => {
+    const on = l.state === 'on';
+    return `
+      <div class="bg-slate-800 rounded-lg p-5 border ${on ? 'border-yellow-500/50 shadow-lg shadow-yellow-500/10' : 'border-slate-700'} transition">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="text-lg font-semibold">${l.name}</div>
+            <div class="text-xs text-slate-400 font-mono">id: ${l.id}</div>
+          </div>
+          <div class="text-4xl">${on ? '💡' : '⚫'}</div>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-bold ${on ? 'text-yellow-300' : 'text-slate-500'}">
+            ${l.state.toUpperCase()}
+          </span>
+          <button onclick="toggleLight(${l.id})"
+            class="${on ? 'bg-yellow-500 hover:bg-yellow-400 text-slate-900' : 'bg-slate-600 hover:bg-slate-500 text-white'} px-4 py-1.5 rounded font-semibold transition">
+            Toggle
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderEvent(ev) {
+  const time = new Date(ev.created_at).toLocaleTimeString();
+  const ok = ev.arduino_ok ? '' : ' <span class="text-red-400">⚠ arduino unreachable</span>';
+  const item = document.createElement('div');
+  item.className = 'bg-slate-800 border border-slate-700 rounded p-3 text-sm';
+  item.innerHTML = `
+    <div class="flex items-center justify-between mb-1">
+      <div>${ev.state === 'on' ? '💡' : '⚫'} Light ${ev.light_id} → <b>${ev.state.toUpperCase()}</b>${ok}</div>
+      <div class="text-xs text-slate-500">${time}</div>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-slate-400">
+      ${sourceBadge(ev.source)}
+      <span class="font-mono">${ev.source_ip || ''}</span>
+    </div>`;
+  eventsEl.prepend(item);
+  while (eventsEl.children.length > 50) eventsEl.lastChild.remove();
+}
+
+async function toggleLight(id) {
+  await fetch(`${API_BASE}/api/lights/${id}/toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Source': 'dashboard' },
+    body: JSON.stringify({}),
+  });
+}
+
+async function loadState() {
+  try {
+    const [lr, er] = await Promise.all([
+      fetch(`${API_BASE}/api/lights`).then(r => r.json()),
+      fetch(`${API_BASE}/api/events`).then(r => r.json()),
+    ]);
+    lights = lr;
+    renderLights();
+    eventsEl.innerHTML = '';
+    er.slice().reverse().forEach(renderEvent);
+  } catch (e) {
+    statusEl.textContent = '⚠️ backend unreachable';
+    statusEl.className = 'text-red-400';
+  }
+}
+
+function connectWS() {
+  const ws = new WebSocket(WS_URL);
+  ws.onopen = () => { statusEl.textContent = '✅ live'; statusEl.className = 'text-green-400'; };
+  ws.onclose = () => {
+    statusEl.textContent = '⚠️ reconnecting…';
+    statusEl.className = 'text-yellow-300';
+    setTimeout(connectWS, 2000);
+  };
+  ws.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    if (msg.type === 'event') {
+      const idx = lights.findIndex(x => x.id === msg.light.id);
+      if (idx >= 0) lights[idx] = msg.light;
+      renderLights();
+      renderEvent(msg.event);
+    }
+  };
+}
+
+loadState();
+connectWS();
+</script>
+</body>
+</html>

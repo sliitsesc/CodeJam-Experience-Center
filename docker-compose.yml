@@ -1,0 +1,24 @@
+# Both backend and frontend run in Docker.
+# A tiny TCP bridge (`bridge/`) runs natively on the host to own the Arduino
+# USB serial port — Docker on macOS can't access /dev/cu.usbmodem* directly.
+# The backend reaches the bridge via host.docker.internal:5331.
+
+services:
+  backend:
+    build: ./backend
+    environment:
+      - PORT=3001
+      - SERIAL_URL=tcp://host.docker.internal:5331
+    ports:
+      - "3001:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

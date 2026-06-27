@@ -1,0 +1,12 @@
+{
+  "name": "arduino-serial-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node bridge.js",
+    "list-ports": "node list-ports.js"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  }
+}
