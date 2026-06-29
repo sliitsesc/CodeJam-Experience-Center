@@ -15,24 +15,114 @@
           Backend: <span id="status" class="text-yellow-300">connecting…</span>
         </p>
       </div>
-      <div class="text-xs text-slate-400 bg-slate-800 px-3 py-2 rounded border border-slate-700 font-mono">
-        Your source tag: <span class="text-blue-400">dashboard</span>
+      <div class="flex items-center gap-3">
+        <button id="audio-unlock" class="hidden text-xs px-3 py-2 rounded bg-yellow-500 text-slate-900 font-semibold">
+          🔊 Enable sound
+        </button>
+        <div class="text-xs text-slate-400 bg-slate-800 px-3 py-2 rounded border border-slate-700 font-mono">
+          Your source tag: <span class="text-blue-400">dashboard</span>
+        </div>
       </div>
     </header>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <section class="lg:col-span-2">
-        <h2 class="text-lg font-semibold mb-3 text-slate-300">Lights & Patterns</h2>
-        <div id="lights" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+      <section class="lg:col-span-2 space-y-6">
+        <div>
+          <h2 class="text-lg font-semibold mb-3 text-slate-300">Lights & Patterns</h2>
+          <div id="lights" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </div>
 
-        <div class="mt-6 bg-slate-800/50 border border-slate-700 rounded p-4 text-xs text-slate-400">
-          <div class="font-semibold text-slate-300 mb-2">Trigger a pattern from an external service (curl)</div>
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-slate-300">Combinations <span class="text-xs text-slate-500 font-normal">(sound + LED pattern)</span></h2>
+            <button id="new-combo-btn" class="text-xs px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium">+ New combo</button>
+          </div>
+
+          <form id="combo-form" class="hidden bg-slate-800 border border-slate-700 rounded-lg p-4 mb-4 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Name</label>
+                <input id="combo-name" type="text" required maxlength="60" placeholder="e.g. Doorbell"
+                  class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">LED pattern</label>
+                <select id="combo-pattern" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Sound source</label>
+              <div class="flex flex-wrap gap-x-4 gap-y-1 mb-2">
+                <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input type="radio" name="sound-type" value="preset" checked /> Preset
+                </label>
+                <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input type="radio" name="sound-type" value="upload" /> Upload file
+                </label>
+                <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input type="radio" name="sound-type" value="url" /> Direct URL
+                </label>
+                <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input type="radio" name="sound-type" value="youtube" /> YouTube link
+                </label>
+              </div>
+
+              <div id="sound-preset-wrap">
+                <select id="sound-preset" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></select>
+                <button type="button" id="preview-preset" class="mt-2 text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">▶ Preview</button>
+              </div>
+
+              <div id="sound-upload-wrap" class="hidden space-y-2">
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1">Pick an uploaded sound</label>
+                  <select id="sound-upload-pick" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></select>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1">…or upload a new file (mp3/wav/ogg, max 10 MB)</label>
+                  <input id="sound-upload-file" type="file" accept="audio/*"
+                    class="w-full text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-slate-700 file:text-slate-200 file:cursor-pointer" />
+                  <div id="upload-progress" class="text-xs text-slate-400 mt-1"></div>
+                </div>
+              </div>
+
+              <div id="sound-url-wrap" class="hidden">
+                <input id="sound-url" type="url" placeholder="https://example.com/sound.mp3"
+                  class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+
+              <div id="sound-youtube-wrap" class="hidden">
+                <input id="sound-youtube" type="url" placeholder="https://www.youtube.com/watch?v=..."
+                  class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                <div class="text-xs text-slate-500 mt-1">Tip: any youtube.com/watch, youtu.be, or youtube.com/shorts URL works.</div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button type="submit" class="text-sm px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium">Save combo</button>
+              <button type="button" id="cancel-combo" class="text-sm px-4 py-2 rounded bg-slate-700 hover:bg-slate-600">Cancel</button>
+              <span id="combo-error" class="text-sm text-red-400"></span>
+            </div>
+          </form>
+
+          <div id="now-playing" class="hidden mb-3 bg-yellow-500/10 border border-yellow-500/40 rounded-lg p-3"></div>
+          <div id="combos" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+
+          <details class="mt-4 bg-slate-800/40 border border-slate-700 rounded p-3 text-sm">
+            <summary class="cursor-pointer text-slate-300 font-medium">Uploaded sounds</summary>
+            <div id="uploads-list" class="mt-3 space-y-2"></div>
+          </details>
+        </div>
+
+        <div class="bg-slate-800/50 border border-slate-700 rounded p-4 text-xs text-slate-400">
+          <div class="font-semibold text-slate-300 mb-2">Trigger from an external service</div>
           <pre class="bg-slate-900 p-3 rounded overflow-x-auto text-slate-300">curl -X POST http://localhost:3001/api/lights/1/pattern \
-  -H "Content-Type: application/json" \
-  -H "X-Source: external-api" \
-  -d '{"pattern":"blink"}'</pre>
-          <div class="mt-2">Valid patterns: <code class="text-slate-300">off · on · blink · fast_blink · heartbeat · strobe · sos</code></div>
-          <div class="mt-1">It will appear in the event feed instantly with the <span class="text-orange-300 font-mono">external-api</span> badge.</div>
+  -H "Content-Type: application/json" -H "X-Source: external-api" \
+  -d '{"pattern":"blink"}'
+
+# Or trigger a saved combo by name (LED fires; sound plays on any open dashboard):
+curl -X POST http://localhost:3001/api/combos/Doorbell/trigger \
+  -H "X-Source: external-api"</pre>
         </div>
       </section>
 
@@ -43,25 +133,233 @@
     </div>
   </div>
 
+  <!-- Hidden YouTube player mount. Iframe is loaded on demand. -->
+  <div id="yt-host" class="fixed -z-10 opacity-0 pointer-events-none" style="left:-9999px;top:-9999px;width:1px;height:1px;"></div>
+
 <script>
 const API_BASE = '';
 const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 
-const PATTERNS = ['off', 'on', 'blink', 'fast_blink', 'heartbeat', 'strobe', 'sos'];
+const PATTERNS = [
+  'off', 'on', 'blink', 'fast_blink', 'heartbeat', 'strobe', 'sos',
+  'flicker', 'triple_blink', 'wave', 'disco', 'morse_help',
+];
 const PATTERN_LABEL = {
   off: 'Off', on: 'On', blink: 'Blink', fast_blink: 'Fast Blink',
   heartbeat: 'Heartbeat', strobe: 'Strobe', sos: 'SOS',
+  flicker: 'Flicker', triple_blink: 'Triple Blink', wave: 'Wave',
+  disco: 'Disco', morse_help: 'Morse HELP',
 };
 const PATTERN_ICON = {
   off: '⚫', on: '💡', blink: '✨', fast_blink: '⚡',
   heartbeat: '💓', strobe: '🌟', sos: '🆘',
+  flicker: '🕯️', triple_blink: '🔁', wave: '🌊', disco: '🪩', morse_help: '📟',
 };
+const SOUND_PRESETS = ['beep', 'chime', 'alarm', 'siren', 'success', 'error'];
 
 const lightsEl = document.getElementById('lights');
+const combosEl = document.getElementById('combos');
 const eventsEl = document.getElementById('events');
 const statusEl = document.getElementById('status');
+const audioUnlockBtn = document.getElementById('audio-unlock');
 
-let lights = [];
+let lights  = [];
+let combos  = [];
+let uploads = []; // [{id, name, mime, ext, size, created_at}]
+
+/* ──────────────── Audio ──────────────── */
+
+// Web Audio context — most browsers require a user gesture before they let
+// audio play. We create lazily and show the "Enable sound" button if blocked.
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  return audioCtx;
+}
+function ensureAudioUnlocked() {
+  const ctx = getAudioCtx();
+  if (!ctx) return false;
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+    audioUnlockBtn.classList.remove('hidden');
+    return false;
+  }
+  audioUnlockBtn.classList.add('hidden');
+  return true;
+}
+audioUnlockBtn.addEventListener('click', () => {
+  const ctx = getAudioCtx();
+  if (ctx) ctx.resume().then(() => audioUnlockBtn.classList.add('hidden'));
+});
+
+function tone(freq, ms, { type = 'sine', volume = 0.2, attack = 0.01, release = 0.05, startOffset = 0 } = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime + startOffset;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(volume, t0 + attack);
+  gain.gain.linearRampToValueAtTime(0, t0 + ms / 1000 + release);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + ms / 1000 + release + 0.02);
+}
+
+function sweep(fromHz, toHz, ms, { type = 'sawtooth', volume = 0.18 } = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(fromHz, t0);
+  osc.frequency.linearRampToValueAtTime(toHz, t0 + ms / 1000);
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(volume, t0 + 0.02);
+  gain.gain.linearRampToValueAtTime(0, t0 + ms / 1000 + 0.05);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + ms / 1000 + 0.1);
+}
+
+const PRESET_PLAYERS = {
+  beep:    () => tone(880, 200, { type: 'square', volume: 0.15 }),
+  chime:   () => { tone(880, 300, { type: 'sine' }); tone(1318, 500, { type: 'sine', startOffset: 0.18 }); },
+  alarm:   () => { for (let i = 0; i < 3; i++) { tone(1000, 150, { type: 'square', startOffset: i * 0.25 }); } },
+  siren:   () => { sweep(400, 1200, 600); setTimeout(() => sweep(1200, 400, 600), 600); },
+  success: () => { tone(659, 120, { startOffset: 0 }); tone(784, 120, { startOffset: 0.12 }); tone(988, 250, { startOffset: 0.24 }); },
+  error:   () => { tone(220, 200, { type: 'sawtooth', volume: 0.2 }); tone(196, 350, { type: 'sawtooth', volume: 0.2, startOffset: 0.18 }); },
+};
+
+function playPreset(name) {
+  if (!ensureAudioUnlocked()) return;
+  const fn = PRESET_PLAYERS[name];
+  if (fn) fn();
+}
+
+// Approximate cycle length per preset — used as the loop interval.
+const PRESET_LOOP_MS = {
+  beep: 800, chime: 1200, alarm: 1300, siren: 1300, success: 1200, error: 900,
+};
+
+function startPresetLoop(name) {
+  if (!ensureAudioUnlocked()) return () => {};
+  const fn = PRESET_PLAYERS[name];
+  if (!fn) return () => {};
+  fn();
+  const id = setInterval(fn, PRESET_LOOP_MS[name] || 1200);
+  return () => clearInterval(id);
+}
+
+function startUrlLoop(url) {
+  try {
+    const a = new Audio(url);
+    a.crossOrigin = 'anonymous';
+    a.loop = true;
+    a.play().catch((e) => console.warn('[sound] url play failed:', e.message));
+    return () => { try { a.pause(); a.src = ''; } catch {} };
+  } catch (e) {
+    console.warn('[sound] url error:', e.message);
+    return () => {};
+  }
+}
+
+/* ──────────────── YouTube ──────────────── */
+// Use the IFrame API so any YouTube URL works (including ones that block direct audio extraction).
+// Only one player at a time — new triggers reload it.
+
+let ytReadyResolve;
+const ytReady = new Promise((r) => { ytReadyResolve = r; });
+window.onYouTubeIframeAPIReady = () => ytReadyResolve();
+
+(function loadYouTubeAPI() {
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+})();
+
+function extractYouTubeId(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
+    if (u.hostname.endsWith('youtube.com')) {
+      if (u.pathname === '/watch') return u.searchParams.get('v');
+      const m = u.pathname.match(/^\/(embed|shorts|v|live)\/([^/?#]+)/);
+      if (m) return m[2];
+    }
+  } catch {}
+  // Fallback: maybe they pasted just the ID.
+  return /^[\w-]{11}$/.test(url) ? url : null;
+}
+
+let ytPlayer = null;
+function startYouTubeLoop(url) {
+  const id = extractYouTubeId(url);
+  if (!id) { console.warn('[sound] could not parse YouTube URL:', url); return () => {}; }
+  let stopped = false;
+  let localPlayer = null;
+
+  ytReady.then(() => {
+    if (stopped) return;
+    const host = document.getElementById('yt-host');
+    host.innerHTML = '<div id="yt-player"></div>';
+    localPlayer = new YT.Player('yt-player', {
+      height: '1', width: '1', videoId: id,
+      playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
+      events: {
+        onReady: (e) => { if (!stopped) try { e.target.playVideo(); } catch {} },
+        // YT.PlayerState.ENDED === 0 — restart for an indefinite loop.
+        onStateChange: (e) => { if (e.data === 0 && !stopped) try { e.target.playVideo(); } catch {} },
+      },
+    });
+    ytPlayer = localPlayer;
+  });
+
+  return () => {
+    stopped = true;
+    try { localPlayer?.stopVideo(); } catch {}
+    try { localPlayer?.destroy(); } catch {}
+    const host = document.getElementById('yt-host');
+    if (host) host.innerHTML = '';
+    if (ytPlayer === localPlayer) ytPlayer = null;
+  };
+}
+
+function startLoopedSound(sound) {
+  if (!sound) return () => {};
+  if (sound.type === 'preset')  return startPresetLoop(sound.value);
+  if (sound.type === 'url')     return startUrlLoop(sound.value);
+  if (sound.type === 'youtube') return startYouTubeLoop(sound.value);
+  if (sound.type === 'upload')  return startUrlLoop(`${API_BASE}/api/sounds/${sound.value}`);
+  return () => {};
+}
+
+// Tracks the combo whose sound is currently looping in this browser.
+// `stop` tears down whichever audio source we started for that combo.
+let activeCombo = null; // { id, name, stop }
+
+function stopActiveSound() {
+  if (!activeCombo) return;
+  try { activeCombo.stop(); } catch {}
+  activeCombo = null;
+}
+
+function startComboPlayback(combo) {
+  stopActiveSound();
+  const stop = startLoopedSound(combo.sound);
+  activeCombo = { id: combo.id, name: combo.name, stop };
+  renderCombos();
+  renderNowPlaying();
+}
+
+/* ──────────────── Rendering ──────────────── */
 
 function sourceBadge(source) {
   const map = {
@@ -102,11 +400,81 @@ function renderLights() {
   }).join('');
 }
 
+function soundLabel(sound) {
+  if (!sound) return '';
+  if (sound.type === 'preset')  return `🎵 ${sound.value}`;
+  if (sound.type === 'url')     return `🔗 ${sound.value.length > 36 ? sound.value.slice(0, 33) + '…' : sound.value}`;
+  if (sound.type === 'youtube') return `▶ YouTube`;
+  if (sound.type === 'upload') {
+    const up = uploads.find(u => u.id === Number(sound.value));
+    return `📁 ${up ? up.name : `upload #${sound.value} (missing)`}`;
+  }
+  return sound.type;
+}
+
+function renderCombos() {
+  if (combos.length === 0) {
+    combosEl.innerHTML = `<div class="col-span-full text-sm text-slate-500 italic py-4 text-center bg-slate-800/40 border border-dashed border-slate-700 rounded">No combos yet — click "+ New combo" to make one.</div>`;
+    return;
+  }
+  combosEl.innerHTML = combos.map(c => {
+    const isActive = activeCombo && activeCombo.id === c.id;
+    const borderCls = isActive ? 'border-yellow-500/60 shadow-lg shadow-yellow-500/10' : 'border-slate-700';
+    const btnCls = isActive
+      ? 'bg-red-500 hover:bg-red-400 text-white'
+      : 'bg-yellow-500 hover:bg-yellow-400 text-slate-900';
+    const btnLabel = isActive ? '⏹ Stop' : '▶ Play';
+    return `
+    <div class="bg-slate-800 border ${borderCls} rounded-lg p-4 transition">
+      <div class="flex items-start justify-between mb-2">
+        <div>
+          <div class="font-semibold">${escapeHtml(c.name)}</div>
+          <div class="text-xs text-slate-400 mt-0.5">
+            ${PATTERN_ICON[c.pattern] || '💡'} ${PATTERN_LABEL[c.pattern] || c.pattern}
+            <span class="mx-1">·</span>
+            ${escapeHtml(soundLabel(c.sound))}
+          </div>
+        </div>
+        <button onclick="deleteCombo(${c.id})" title="Delete" class="text-slate-500 hover:text-red-400 text-sm">✕</button>
+      </div>
+      <button onclick="triggerCombo(${c.id})"
+        class="w-full text-sm px-3 py-1.5 rounded font-semibold ${btnCls}">
+        ${btnLabel}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function renderNowPlaying() {
+  const el = document.getElementById('now-playing');
+  if (!el) return;
+  if (!activeCombo) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="flex items-center gap-3">
+      <span class="text-lg">🔊</span>
+      <div class="flex-1">
+        <div class="text-xs text-slate-400">Now playing</div>
+        <div class="font-semibold">${escapeHtml(activeCombo.name)}</div>
+      </div>
+      <button onclick="stopCombo()" class="text-sm px-3 py-1.5 rounded bg-red-500 hover:bg-red-400 text-white font-semibold">⏹ Stop</button>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
 function renderEvent(ev) {
   const time = new Date(ev.created_at).toLocaleTimeString();
   const ok = ev.arduino_ok ? '' : ' <span class="text-red-400">⚠ arduino unreachable</span>';
   const icon = PATTERN_ICON[ev.pattern] || '💡';
   const label = PATTERN_LABEL[ev.pattern] || ev.pattern || '?';
+  const comboTag = ev.combo ? `<span class="text-xs px-2 py-0.5 rounded border bg-purple-500/20 text-purple-300 border-purple-500/40 font-mono">combo: ${escapeHtml(ev.combo.name)}</span>` : '';
   const item = document.createElement('div');
   item.className = 'bg-slate-800 border border-slate-700 rounded p-3 text-sm';
   item.innerHTML = `
@@ -114,13 +482,16 @@ function renderEvent(ev) {
       <div>${icon} Light ${ev.light_id} → <b>${label}</b>${ok}</div>
       <div class="text-xs text-slate-500">${time}</div>
     </div>
-    <div class="flex items-center gap-2 text-xs text-slate-400">
+    <div class="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
       ${sourceBadge(ev.source)}
+      ${comboTag}
       <span class="font-mono">${ev.source_ip || ''}</span>
     </div>`;
   eventsEl.prepend(item);
   while (eventsEl.children.length > 50) eventsEl.lastChild.remove();
 }
+
+/* ──────────────── Actions ──────────────── */
 
 async function setPattern(id, pattern) {
   await fetch(`${API_BASE}/api/lights/${id}/pattern`, {
@@ -130,20 +501,68 @@ async function setPattern(id, pattern) {
   });
 }
 
+async function triggerCombo(id) {
+  // If this combo is already playing, the button acts as Stop.
+  if (activeCombo && activeCombo.id === id) {
+    return stopCombo();
+  }
+  // Unlock audio on this user gesture so WS-driven playback works after this.
+  ensureAudioUnlocked();
+  await fetch(`${API_BASE}/api/combos/${id}/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Source': 'dashboard' },
+  });
+}
+
+async function stopCombo() {
+  await fetch(`${API_BASE}/api/combos/stop`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Source': 'dashboard' },
+  });
+}
+
+async function deleteCombo(id) {
+  if (!confirm('Delete this combo?')) return;
+  await fetch(`${API_BASE}/api/combos/${id}`, { method: 'DELETE' });
+}
+
 async function loadState() {
   try {
-    const [lr, er] = await Promise.all([
+    const [lr, er, cr, sr] = await Promise.all([
       fetch(`${API_BASE}/api/lights`).then(r => r.json()),
       fetch(`${API_BASE}/api/events`).then(r => r.json()),
+      fetch(`${API_BASE}/api/combos`).then(r => r.json()),
+      fetch(`${API_BASE}/api/sounds`).then(r => r.json()),
     ]);
-    lights = lr;
+    lights  = lr;
+    combos  = cr;
+    uploads = sr;
     renderLights();
+    renderCombos();
+    renderUploads();
+    refreshUploadPicker();
     eventsEl.innerHTML = '';
     er.slice().reverse().forEach(renderEvent);
   } catch (e) {
     statusEl.textContent = '⚠️ backend unreachable';
     statusEl.className = 'text-red-400';
   }
+}
+
+async function reloadCombos() {
+  try {
+    combos = await fetch(`${API_BASE}/api/combos`).then(r => r.json());
+    renderCombos();
+  } catch {}
+}
+
+async function reloadUploads() {
+  try {
+    uploads = await fetch(`${API_BASE}/api/sounds`).then(r => r.json());
+    renderUploads();
+    refreshUploadPicker();
+    renderCombos();
+  } catch {}
 }
 
 function connectWS() {
@@ -161,9 +580,193 @@ function connectWS() {
       if (idx >= 0) lights[idx] = msg.light;
       renderLights();
       renderEvent(msg.event);
+      // Any event without a combo (manual pattern button, /api/combos/stop,
+      // or a different combo) means the previously-active sound is stale.
+      if (msg.event.combo) {
+        startComboPlayback(msg.event.combo);
+      } else {
+        stopActiveSound();
+        renderCombos();
+        renderNowPlaying();
+      }
+    } else if (msg.type === 'combos_changed') {
+      reloadCombos();
+    } else if (msg.type === 'sounds_changed') {
+      reloadUploads();
     }
   };
 }
+
+/* ──────────────── Combo form ──────────────── */
+
+const comboForm = document.getElementById('combo-form');
+const comboError = document.getElementById('combo-error');
+const newComboBtn = document.getElementById('new-combo-btn');
+const cancelComboBtn = document.getElementById('cancel-combo');
+const comboPatternEl = document.getElementById('combo-pattern');
+const soundPresetEl = document.getElementById('sound-preset');
+
+PATTERNS.forEach(p => {
+  const opt = document.createElement('option');
+  opt.value = p; opt.textContent = PATTERN_LABEL[p];
+  comboPatternEl.appendChild(opt);
+});
+SOUND_PRESETS.forEach(p => {
+  const opt = document.createElement('option');
+  opt.value = p; opt.textContent = p;
+  soundPresetEl.appendChild(opt);
+});
+
+const uploadPickerEl   = document.getElementById('sound-upload-pick');
+const uploadFileEl     = document.getElementById('sound-upload-file');
+const uploadProgressEl = document.getElementById('upload-progress');
+const uploadsListEl    = document.getElementById('uploads-list');
+
+function refreshUploadPicker(selectId = null) {
+  uploadPickerEl.innerHTML = '';
+  if (uploads.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = ''; opt.textContent = '— no uploads yet —'; opt.disabled = true; opt.selected = true;
+    uploadPickerEl.appendChild(opt);
+    return;
+  }
+  for (const u of uploads) {
+    const opt = document.createElement('option');
+    opt.value = String(u.id);
+    opt.textContent = `${u.name} (${Math.round(u.size / 1024)} KB)`;
+    uploadPickerEl.appendChild(opt);
+  }
+  if (selectId != null) uploadPickerEl.value = String(selectId);
+}
+
+function renderUploads() {
+  if (uploads.length === 0) {
+    uploadsListEl.innerHTML = '<div class="text-xs text-slate-500 italic">No uploads yet.</div>';
+    return;
+  }
+  uploadsListEl.innerHTML = uploads.map(u => `
+    <div class="flex items-center justify-between bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs">
+      <div>
+        <div class="text-slate-200">${escapeHtml(u.name)}</div>
+        <div class="text-slate-500 font-mono">id ${u.id} · ${u.ext} · ${Math.round(u.size / 1024)} KB</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="previewUpload(${u.id})" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">▶ Preview</button>
+        <button onclick="deleteUpload(${u.id})" title="Delete" class="text-slate-500 hover:text-red-400">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function previewUpload(id) {
+  ensureAudioUnlocked();
+  try { new Audio(`${API_BASE}/api/sounds/${id}`).play(); } catch {}
+}
+
+async function deleteUpload(id) {
+  if (!confirm('Delete this uploaded sound?')) return;
+  const r = await fetch(`${API_BASE}/api/sounds/${id}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    alert(err.error || `HTTP ${r.status}`);
+  }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+uploadFileEl.addEventListener('change', async () => {
+  const file = uploadFileEl.files?.[0];
+  if (!file) return;
+  uploadProgressEl.textContent = `Uploading ${file.name}…`;
+  try {
+    const data_base64 = await readFileAsBase64(file);
+    const r = await fetch(`${API_BASE}/api/sounds`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: file.name, mime: file.type || 'audio/mpeg', data_base64 }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      uploadProgressEl.textContent = `❌ ${err.error || `HTTP ${r.status}`}`;
+      return;
+    }
+    const sound = await r.json();
+    uploads = uploads.concat([sound]);
+    refreshUploadPicker(sound.id);
+    renderUploads();
+    uploadProgressEl.textContent = `✅ ${sound.name} uploaded.`;
+    uploadFileEl.value = '';
+  } catch (e) {
+    uploadProgressEl.textContent = `❌ ${e.message}`;
+  }
+});
+
+function toggleSoundInputs() {
+  const t = document.querySelector('input[name="sound-type"]:checked').value;
+  document.getElementById('sound-preset-wrap').classList.toggle('hidden', t !== 'preset');
+  document.getElementById('sound-upload-wrap').classList.toggle('hidden', t !== 'upload');
+  document.getElementById('sound-url-wrap').classList.toggle('hidden', t !== 'url');
+  document.getElementById('sound-youtube-wrap').classList.toggle('hidden', t !== 'youtube');
+}
+document.querySelectorAll('input[name="sound-type"]').forEach(r => r.addEventListener('change', toggleSoundInputs));
+
+newComboBtn.addEventListener('click', () => {
+  comboForm.classList.remove('hidden');
+  newComboBtn.classList.add('hidden');
+  comboError.textContent = '';
+});
+cancelComboBtn.addEventListener('click', () => {
+  comboForm.classList.add('hidden');
+  newComboBtn.classList.remove('hidden');
+  comboForm.reset();
+  toggleSoundInputs();
+});
+
+document.getElementById('preview-preset').addEventListener('click', () => {
+  playPreset(soundPresetEl.value);
+});
+
+comboForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  comboError.textContent = '';
+  const name = document.getElementById('combo-name').value.trim();
+  const pattern = comboPatternEl.value;
+  const type = document.querySelector('input[name="sound-type"]:checked').value;
+  let value = '';
+  if (type === 'preset')  value = soundPresetEl.value;
+  if (type === 'url')     value = document.getElementById('sound-url').value.trim();
+  if (type === 'youtube') value = document.getElementById('sound-youtube').value.trim();
+  if (type === 'upload') {
+    value = uploadPickerEl.value;
+    if (!value) { comboError.textContent = 'Upload a sound first, then save the combo.'; return; }
+  }
+
+  try {
+    const r = await fetch(`${API_BASE}/api/combos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, pattern, sound: { type, value } }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      comboError.textContent = err.error || `HTTP ${r.status}`;
+      return;
+    }
+    comboForm.reset();
+    toggleSoundInputs();
+    comboForm.classList.add('hidden');
+    newComboBtn.classList.remove('hidden');
+  } catch (e) {
+    comboError.textContent = e.message;
+  }
+});
 
 loadState();
 connectWS();

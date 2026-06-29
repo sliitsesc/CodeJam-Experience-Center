@@ -9,10 +9,13 @@ services:
     environment:
       - PORT=3001
       - SERIAL_URL=tcp://host.docker.internal:5331
+      - DATA_DIR=/data
     ports:
       - "3001:3001"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - backend-data:/data
     restart: unless-stopped
 
   frontend:
@@ -22,3 +25,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  backend-data:

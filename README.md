@@ -66,15 +66,24 @@ Stop everything: `Ctrl+C` once.
 
 ## Patterns
 
-| Pattern       | What it does                          |
-|---------------|---------------------------------------|
-| `off`         | LED solid off                          |
-| `on`          | LED solid on                           |
-| `blink`       | 1 Hz blink (500 ms on / 500 ms off)    |
-| `fast_blink`  | 5 Hz blink (100 ms on / 100 ms off)    |
-| `heartbeat`   | Double-pulse, ~1 s cycle               |
-| `strobe`      | 10 Hz strobe                           |
-| `sos`         | Morse SOS                              |
+| Pattern         | What it does                                |
+|-----------------|---------------------------------------------|
+| `off`           | LED solid off                                |
+| `on`            | LED solid on                                 |
+| `blink`         | 1 Hz blink (500 ms on / 500 ms off)          |
+| `fast_blink`    | 5 Hz blink                                   |
+| `heartbeat`     | Double-pulse, ~1 s cycle                     |
+| `strobe`        | 10 Hz strobe                                 |
+| `sos`           | Morse SOS                                    |
+| `flicker`       | Candle-like random short on/off              |
+| `triple_blink`  | Three quick blinks, then a pause             |
+| `wave`          | Blink rate ramps fast then slow              |
+| `disco`         | Faster, harsher random toggles               |
+| `morse_help`    | Morse HELP                                   |
+
+> Re-upload `arduino/light_controller/light_controller.ino` whenever the
+> pattern list changes — the new pattern chars (`k t w d m`) need to be
+> recognized on the board side.
 
 ## Try it
 
@@ -96,16 +105,60 @@ pill turns yellow on the card, real LED starts blinking SOS.
 
 ---
 
+## Combinations (sound + LED)
+
+A **combo** is a named pair: one sound + one LED pattern. Trigger a combo and
+the LED fires on the Arduino while the sound plays on every open dashboard.
+
+Make one from the dashboard: click **+ New combo**, give it a name (e.g.
+*Doorbell*), pick a pattern, and choose a sound source:
+
+| Sound source | What you provide |
+|---|---|
+| **Preset**   | One of `beep`, `chime`, `alarm`, `siren`, `success`, `error` (synthesized in the browser — no network) |
+| **Upload file** | An audio file (mp3/wav/ogg/m4a/aac/flac/webm) up to **10 MB**. Stored server-side and reusable across combos. |
+| **Direct URL** | Any `.mp3`/`.wav`/`.ogg` URL — the browser plays it with `<audio>` |
+| **YouTube**  | Any `youtube.com/watch`, `youtu.be`, or `youtube.com/shorts` URL — played via a hidden YouTube iframe |
+
+Combos are saved server-side (in `/data/combos.json` inside the backend
+container, backed by a Docker volume) so they survive restarts and are shared
+across every browser hitting the dashboard.
+
+**Sound loops and the LED stays on until you press Stop.** The combo card's
+Play button flips to ⏹ Stop while it's running, and a "Now playing" strip with
+its own Stop button appears at the top of the section. Pressing Stop turns the
+LED off and stops the audio on every connected dashboard.
+
+> Browsers block audio until you interact with the page. If you see a yellow
+> **🔊 Enable sound** button in the header after a refresh, click it once.
+
 ## API
 
 | Method | Path                        | What it does |
 |--------|-----------------------------|--------------|
 | GET    | `/api/patterns`             | List of valid pattern names |
+| GET    | `/api/sound-presets`        | List of built-in sound preset names |
 | GET    | `/api/lights`               | Current state of all lights (includes `pattern`) |
 | GET    | `/api/events`               | Last 200 trigger events |
 | POST   | `/api/lights/:id/pattern`   | Set a pattern. Body: `{"pattern":"blink"}`. Header `X-Source: your-name` tags the trigger. |
+| GET    | `/api/combos`               | List saved combos |
+| POST   | `/api/combos`               | Create a combo. Body: `{"name":"Doorbell","pattern":"blink","sound":{"type":"preset","value":"chime"}}` |
+| DELETE | `/api/combos/:id`           | Delete a combo |
+| POST   | `/api/combos/:idOrName/trigger` | Trigger a saved combo by id or name. LED fires; dashboards loop the sound until stopped. |
+| POST   | `/api/combos/stop`          | Stop the active combo: turns the LED off and tells every dashboard to stop the sound. |
+| GET    | `/api/sounds`               | List uploaded audio files (metadata only). |
+| POST   | `/api/sounds`               | Upload an audio file. Body: `{"name":"foo.mp3","mime":"audio/mpeg","data_base64":"…"}`. Max 10 MB. |
+| GET    | `/api/sounds/:id`           | Stream the uploaded file. |
+| DELETE | `/api/sounds/:id`           | Delete an uploaded file (refused if a combo references it). |
 | GET    | `/ws`                       | WebSocket — pushes live event updates |
 | GET    | `/api/health`               | Health + bridge status |
+
+**Trigger a combo from anywhere:**
+
+```bash
+curl -X POST http://localhost:3001/api/combos/Doorbell/trigger \
+  -H "X-Source: external-api"
+```
 
 ---
 
