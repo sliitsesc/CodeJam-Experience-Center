@@ -28,7 +28,7 @@ const MIME_TO_EXT = {
   'audio/flac': 'flac',
 };
 
-// Pattern name -> single-char command sent to the Arduino.
+// Pattern name -> single-char command sent to the Arduino (second byte).
 const PATTERN_MAP = {
   off:          '0',
   on:           '1',
@@ -45,13 +45,18 @@ const PATTERN_MAP = {
 };
 const PATTERNS = Object.keys(PATTERN_MAP);
 
+// Channel name -> single-char command sent to the Arduino (first byte).
+// 'red' lights only the red relay, 'white' only the white, 'both' both.
+const CHANNEL_MAP = { red: 'R', white: 'W', both: 'B' };
+const CHANNELS    = Object.keys(CHANNEL_MAP);
+
 // Sound presets are synthesized in the browser via Web Audio API; the backend
 // only stores the preset name. The frontend knows how to play them.
 const SOUND_PRESETS = ['beep', 'chime', 'alarm', 'siren', 'success', 'error'];
 const SOUND_TYPES   = ['preset', 'url', 'youtube', 'upload'];
 
 const lights = new Map();
-lights.set(1, { id: 1, name: 'Main LED', pattern: 'off' });
+lights.set(1, { id: 1, name: 'Main Light', pattern: 'off', channels: 'both' });
 
 const MAX_EVENTS = 200;
 const events = [];
@@ -70,6 +75,8 @@ function loadCombos() {
     if (!fs.existsSync(COMBOS_FILE)) return;
     const raw = JSON.parse(fs.readFileSync(COMBOS_FILE, 'utf8'));
     for (const c of raw.combos || []) {
+      // Backfill: older combos pre-date the channel concept.
+      if (!c.channels) c.channels = 'both';
       combos.set(c.id, c);
       if (c.id >= nextComboId) nextComboId = c.id + 1;
     }
@@ -158,10 +165,15 @@ function connectBridge() {
   });
 }
 
-function sendChar(ch) {
+// Sends "<channel><pattern>\n" to the Arduino. Returns false if the bridge
+// is down so the caller can record arduino_ok=0.
+function sendCommand(channels, pattern) {
   if (!bridgeReady || !bridgeSocket) return false;
+  const ch  = CHANNEL_MAP[channels];
+  const pat = PATTERN_MAP[pattern];
+  if (!ch || !pat) return false;
   try {
-    bridgeSocket.write(ch);
+    bridgeSocket.write(`${ch}${pat}\n`);
     return true;
   } catch (e) {
     console.error('[bridge] write failed:', e.message);
@@ -187,24 +199,31 @@ function broadcast(payload) {
 
 // Fires a pattern on a light, records an event, and broadcasts it.
 // If `combo` is supplied, it's attached so dashboards can play the sound.
-function firePattern({ lightId, pattern, source, sourceIp, combo = null }) {
+// If `channels` is omitted, the light's current channel mask is kept.
+function firePattern({ lightId, pattern, channels, source, sourceIp, combo = null }) {
   const light = lights.get(lightId);
   if (!light) return { error: 'light not found', status: 404 };
   if (!(pattern in PATTERN_MAP)) {
     return { error: 'invalid pattern', valid: PATTERNS, status: 400 };
   }
+  const ch = channels || light.channels || 'both';
+  if (!(ch in CHANNEL_MAP)) {
+    return { error: 'invalid channels', valid: CHANNELS, status: 400 };
+  }
 
-  const arduinoOk = sendChar(PATTERN_MAP[pattern]);
-  light.pattern = pattern;
+  const arduinoOk = sendCommand(ch, pattern);
+  light.pattern  = pattern;
+  light.channels = ch;
 
   const event = {
     id: nextEventId++,
     light_id: lightId,
     pattern,
+    channels: ch,
     source,
     source_ip: sourceIp,
     arduino_ok: arduinoOk ? 1 : 0,
-    combo: combo ? { id: combo.id, name: combo.name, sound: combo.sound } : null,
+    combo: combo ? { id: combo.id, name: combo.name, sound: combo.sound, channels: ch } : null,
     created_at: new Date().toISOString(),
   };
   events.push(event);
@@ -212,7 +231,7 @@ function firePattern({ lightId, pattern, source, sourceIp, combo = null }) {
 
   broadcast({ type: 'event', event, light });
   console.log(
-    `[trigger] light=${lightId} pattern=${pattern} source=${source} ip=${sourceIp} arduino=${arduinoOk}` +
+    `[trigger] light=${lightId} channels=${ch} pattern=${pattern} source=${source} ip=${sourceIp} arduino=${arduinoOk}` +
     (combo ? ` combo=${combo.name}` : '')
   );
   return { ok: true, light, event };
@@ -226,6 +245,11 @@ function validateCombo(body) {
   const pattern = body?.pattern;
   if (!pattern || !(pattern in PATTERN_MAP)) {
     return { error: 'invalid pattern', valid: PATTERNS };
+  }
+
+  const channels = body?.channels || 'both';
+  if (!(channels in CHANNEL_MAP)) {
+    return { error: 'invalid channels', valid: CHANNELS };
   }
 
   const sound = body?.sound;
@@ -248,7 +272,7 @@ function validateCombo(body) {
       return { error: 'sound.value must reference an uploaded sound id' };
     }
   }
-  return { ok: true, name, pattern, sound: { type: sound.type, value } };
+  return { ok: true, name, pattern, channels, sound: { type: sound.type, value } };
 }
 
 app.get('/api/health', (req, res) => {
@@ -257,6 +281,10 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/patterns', (req, res) => {
   res.json(PATTERNS);
+});
+
+app.get('/api/channels', (req, res) => {
+  res.json(CHANNELS);
 });
 
 app.get('/api/sound-presets', (req, res) => {
@@ -277,8 +305,12 @@ app.post('/api/lights/:id/pattern', (req, res) => {
   if (!pattern || !(pattern in PATTERN_MAP)) {
     return res.status(400).json({ error: 'invalid pattern', valid: PATTERNS });
   }
+  const channels = req.body?.channels; // optional — sticky if absent
+  if (channels !== undefined && !(channels in CHANNEL_MAP)) {
+    return res.status(400).json({ error: 'invalid channels', valid: CHANNELS });
+  }
   const source = req.header('X-Source') || req.body?.source || 'unknown';
-  const result = firePattern({ lightId: id, pattern, source, sourceIp: req.ip });
+  const result = firePattern({ lightId: id, pattern, channels, source, sourceIp: req.ip });
   if (result.error) return res.status(result.status || 400).json({ error: result.error, valid: result.valid });
   res.json(result);
 });
@@ -373,6 +405,7 @@ app.post('/api/combos', (req, res) => {
     id: nextComboId++,
     name: v.name,
     pattern: v.pattern,
+    channels: v.channels,
     sound: v.sound,
     created_at: new Date().toISOString(),
   };
@@ -412,7 +445,7 @@ app.post('/api/combos/:idOrName/trigger', (req, res) => {
   const lightId = Number(req.body?.light_id) || 1;
   const source  = req.header('X-Source') || req.body?.source || 'unknown';
   const result  = firePattern({
-    lightId, pattern: combo.pattern, source, sourceIp: req.ip, combo,
+    lightId, pattern: combo.pattern, channels: combo.channels, source, sourceIp: req.ip, combo,
   });
   if (result.error) return res.status(result.status || 400).json({ error: result.error, valid: result.valid });
   res.json({ ...result, combo });

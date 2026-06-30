@@ -1,22 +1,26 @@
-// Arduino Uno LED pattern controller.
-// Reads single-char commands over USB serial and plays a non-blocking pattern.
+// Arduino Uno two-channel LED controller (red + white via relay module).
 //
-// Commands:
-//   '0' off
-//   '1' on
-//   'b' blink         (1 Hz)
-//   'f' fast_blink    (5 Hz)
-//   'h' heartbeat     (double pulse, 1 s cycle)
-//   's' strobe        (10 Hz)
-//   'o' sos           (morse SOS)
-//   'k' flicker       (candle-like random)
-//   't' triple_blink  (three quick blinks then a pause)
-//   'w' wave          (blink rate ramps fast then slow)
-//   'd' disco         (fast random toggles)
-//   'm' morse_help    (morse HELP)
-//   '?' query current pattern
+// Wiring
+//   Pin 7 -> RED  channel IN
+//   Pin 6 -> WHITE channel IN
+//   Module 5V/GND to Uno 5V/GND. Light + supply on the relay's NO/COM/NC side.
+//
+// Most cheap "blue" relay modules are ACTIVE LOW (LOW = relay energized = light on).
+// If yours is the other way, flip ACTIVE_LOW below.
+//
+// Protocol (one command per line, "\n" terminated):
+//   <channel><pattern>\n
+//     channel : R = red only, W = white only, B = both
+//     pattern : 0 1 b f h s o k t w d m   (off, on, blink, fast_blink,
+//                                          heartbeat, strobe, sos, flicker,
+//                                          triple_blink, wave, disco, morse_help)
+//   "?\n" -> query and print current state.
+//
+// Examples: "Rb\n" red blink, "Wm\n" white morse_help, "B0\n" everything off.
 
-const int LIGHT_PIN = 13;
+const int RED_PIN   = 7;
+const int WHITE_PIN = 6;
+const bool ACTIVE_LOW = true;  // flip to false if your relay turns on with HIGH
 
 enum Pattern {
   PAT_OFF,
@@ -33,12 +37,18 @@ enum Pattern {
   PAT_MORSE_HELP
 };
 
-Pattern currentPattern   = PAT_OFF;
-unsigned long patternT0  = 0;
+enum Channels {
+  CH_RED,
+  CH_WHITE,
+  CH_BOTH
+};
 
-// State for patterns whose next toggle time is randomized.
-unsigned long randNextT = 0;
-bool randState = false;
+Pattern  currentPattern  = PAT_OFF;
+Channels currentChannels = CH_BOTH;
+
+unsigned long patternT0  = 0;
+unsigned long randNextT  = 0;
+bool          randState  = false;
 
 const char* patternName(Pattern p) {
   switch (p) {
@@ -58,16 +68,39 @@ const char* patternName(Pattern p) {
   return "?";
 }
 
-void setPattern(Pattern p) {
-  currentPattern = p;
-  patternT0      = millis();
-  randNextT      = patternT0;
-  randState      = false;
-  Serial.print("PATTERN ");
+const char* channelsName(Channels c) {
+  switch (c) {
+    case CH_RED:   return "red";
+    case CH_WHITE: return "white";
+    case CH_BOTH:  return "both";
+  }
+  return "?";
+}
+
+void writeRelay(int pin, bool on) {
+  // Translate logical on/off into the pin level the relay expects.
+  digitalWrite(pin, (on ^ ACTIVE_LOW) ? HIGH : LOW);
+}
+
+void applyOutputs(bool on) {
+  bool wantRed   = (currentChannels == CH_RED   || currentChannels == CH_BOTH) && on;
+  bool wantWhite = (currentChannels == CH_WHITE || currentChannels == CH_BOTH) && on;
+  writeRelay(RED_PIN,   wantRed);
+  writeRelay(WHITE_PIN, wantWhite);
+}
+
+void setState(Channels c, Pattern p) {
+  currentChannels = c;
+  currentPattern  = p;
+  patternT0 = millis();
+  randNextT = patternT0;
+  randState = false;
+  Serial.print("STATE ");
+  Serial.print(channelsName(c));
+  Serial.print(" ");
   Serial.println(patternName(p));
 }
 
-// Walk a (on_ms, off_ms) timing table and decide LED state at position `pos`.
 bool stepTable(const uint16_t (*table)[2], int n, unsigned long pos) {
   unsigned long acc = 0;
   for (int i = 0; i < n; i++) {
@@ -114,7 +147,6 @@ void runPattern() {
     }
 
     case PAT_WAVE: {
-      // 12-step ramp: period drops 500→50 ms, then climbs back. ~3.1 s cycle.
       static const uint16_t pat[12][2] = {
         {500,500},{400,400},{300,300},{200,200},{100,100},{50,50},
         {50,50},{100,100},{200,200},{300,300},{400,400},{500,500}
@@ -124,23 +156,17 @@ void runPattern() {
     }
 
     case PAT_MORSE_HELP: {
-      // unit = 200 ms. H E L P with proper morse spacing.
       static const uint16_t pat[14][2] = {
-        // H = . . . .
-        {200,200},{200,200},{200,200},{200,600},
-        // E = .
-        {200,600},
-        // L = . - . .
-        {200,200},{600,200},{200,200},{200,600},
-        // P = . - - .
-        {200,200},{600,200},{600,200},{200,1400}
+        {200,200},{200,200},{200,200},{200,600},   // H
+        {200,600},                                 // E
+        {200,200},{600,200},{200,200},{200,600},   // L
+        {200,200},{600,200},{600,200},{200,1400}   // P
       };
       on = stepTable(pat, 14, t % 8800UL);
       break;
     }
 
     case PAT_FLICKER: {
-      // Candle-like: short random on/off bursts.
       if (now >= randNextT) {
         randState = !randState;
         randNextT = now + (randState ? random(40, 160) : random(20, 90));
@@ -150,7 +176,6 @@ void runPattern() {
     }
 
     case PAT_DISCO: {
-      // Faster, harsher random toggling than flicker.
       if (now >= randNextT) {
         randState = !randState;
         randNextT = now + random(30, 110);
@@ -160,12 +185,63 @@ void runPattern() {
     }
   }
 
-  digitalWrite(LIGHT_PIN, on ? HIGH : LOW);
+  applyOutputs(on);
+}
+
+bool parsePattern(char c, Pattern *out) {
+  switch (c) {
+    case '0': *out = PAT_OFF;          return true;
+    case '1': *out = PAT_ON;           return true;
+    case 'b': *out = PAT_BLINK;        return true;
+    case 'f': *out = PAT_FAST_BLINK;   return true;
+    case 'h': *out = PAT_HEARTBEAT;    return true;
+    case 's': *out = PAT_STROBE;       return true;
+    case 'o': *out = PAT_SOS;          return true;
+    case 'k': *out = PAT_FLICKER;      return true;
+    case 't': *out = PAT_TRIPLE_BLINK; return true;
+    case 'w': *out = PAT_WAVE;         return true;
+    case 'd': *out = PAT_DISCO;        return true;
+    case 'm': *out = PAT_MORSE_HELP;   return true;
+  }
+  return false;
+}
+
+bool parseChannels(char c, Channels *out) {
+  switch (c) {
+    case 'R': *out = CH_RED;   return true;
+    case 'W': *out = CH_WHITE; return true;
+    case 'B': *out = CH_BOTH;  return true;
+  }
+  return false;
+}
+
+char cmdBuf[8];
+int  cmdLen = 0;
+
+void handleCommand(const char* s, int n) {
+  if (n == 1 && s[0] == '?') {
+    Serial.print("STATE ");
+    Serial.print(channelsName(currentChannels));
+    Serial.print(" ");
+    Serial.println(patternName(currentPattern));
+    return;
+  }
+  if (n != 2) {
+    Serial.println("ERR expected <channel><pattern> e.g. Rb");
+    return;
+  }
+  Channels nc;
+  Pattern  np;
+  if (!parseChannels(s[0], &nc)) { Serial.println("ERR bad channel"); return; }
+  if (!parsePattern (s[1], &np)) { Serial.println("ERR bad pattern"); return; }
+  setState(nc, np);
 }
 
 void setup() {
-  pinMode(LIGHT_PIN, OUTPUT);
-  digitalWrite(LIGHT_PIN, LOW);
+  pinMode(RED_PIN,   OUTPUT);
+  pinMode(WHITE_PIN, OUTPUT);
+  writeRelay(RED_PIN,   false);
+  writeRelay(WHITE_PIN, false);
   randomSeed(analogRead(A0));
   Serial.begin(9600);
   while (!Serial) { ; }
@@ -173,25 +249,18 @@ void setup() {
 }
 
 void loop() {
-  if (Serial.available() > 0) {
+  while (Serial.available() > 0) {
     char c = Serial.read();
-    switch (c) {
-      case '0': setPattern(PAT_OFF);          break;
-      case '1': setPattern(PAT_ON);           break;
-      case 'b': case 'B': setPattern(PAT_BLINK);        break;
-      case 'f': case 'F': setPattern(PAT_FAST_BLINK);   break;
-      case 'h': case 'H': setPattern(PAT_HEARTBEAT);    break;
-      case 's': case 'S': setPattern(PAT_STROBE);       break;
-      case 'o': case 'O': setPattern(PAT_SOS);          break;
-      case 'k': case 'K': setPattern(PAT_FLICKER);      break;
-      case 't': case 'T': setPattern(PAT_TRIPLE_BLINK); break;
-      case 'w': case 'W': setPattern(PAT_WAVE);         break;
-      case 'd': case 'D': setPattern(PAT_DISCO);        break;
-      case 'm': case 'M': setPattern(PAT_MORSE_HELP);   break;
-      case '?':
-        Serial.print("PATTERN ");
-        Serial.println(patternName(currentPattern));
-        break;
+    if (c == '\n' || c == '\r') {
+      if (cmdLen > 0) {
+        cmdBuf[cmdLen] = 0;
+        handleCommand(cmdBuf, cmdLen);
+        cmdLen = 0;
+      }
+    } else if (cmdLen < (int)sizeof(cmdBuf) - 1) {
+      cmdBuf[cmdLen++] = c;
+    } else {
+      cmdLen = 0; // overflow -> drop
     }
   }
   runPattern();

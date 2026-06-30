@@ -39,11 +39,15 @@
           </div>
 
           <form id="combo-form" class="hidden bg-slate-800 border border-slate-700 rounded-lg p-4 mb-4 space-y-3">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label class="block text-xs text-slate-400 mb-1">Name</label>
                 <input id="combo-name" type="text" required maxlength="60" placeholder="e.g. Doorbell"
                   class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Channels</label>
+                <select id="combo-channels" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></select>
               </div>
               <div>
                 <label class="block text-xs text-slate-400 mb-1">LED pattern</label>
@@ -118,9 +122,12 @@
           <div class="font-semibold text-slate-300 mb-2">Trigger from an external service</div>
           <pre class="bg-slate-900 p-3 rounded overflow-x-auto text-slate-300">curl -X POST http://localhost:3001/api/lights/1/pattern \
   -H "Content-Type: application/json" -H "X-Source: external-api" \
-  -d '{"pattern":"blink"}'
+  -d '{"pattern":"blink","channels":"red"}'
 
-# Or trigger a saved combo by name (LED fires; sound plays on any open dashboard):
+# channels is optional — omit it to keep the current channel mask.
+# valid values: red | white | both
+
+# Trigger a saved combo by name (LED fires; sound plays on any open dashboard):
 curl -X POST http://localhost:3001/api/combos/Doorbell/trigger \
   -H "X-Source: external-api"</pre>
         </div>
@@ -156,6 +163,10 @@ const PATTERN_ICON = {
   flicker: '🕯️', triple_blink: '🔁', wave: '🌊', disco: '🪩', morse_help: '📟',
 };
 const SOUND_PRESETS = ['beep', 'chime', 'alarm', 'siren', 'success', 'error'];
+
+const CHANNELS = ['red', 'white', 'both'];
+const CHANNEL_LABEL = { red: 'Red', white: 'White', both: 'Both' };
+const CHANNEL_ICON  = { red: '🔴', white: '⚪', both: '🔴⚪' };
 
 const lightsEl = document.getElementById('lights');
 const combosEl = document.getElementById('combos');
@@ -374,6 +385,7 @@ function sourceBadge(source) {
 function renderLights() {
   lightsEl.innerHTML = lights.map(l => {
     const active = l.pattern || 'off';
+    const channels = l.channels || 'both';
     const isOff = active === 'off';
     const icon = PATTERN_ICON[active] || '💡';
     return `
@@ -386,8 +398,20 @@ function renderLights() {
           <div class="text-4xl">${icon}</div>
         </div>
         <div class="text-xs text-slate-400 mb-2">
-          Current: <span class="text-yellow-300 font-mono">${PATTERN_LABEL[active] || active}</span>
+          Channel: <span class="text-yellow-300 font-mono">${CHANNEL_LABEL[channels]}</span>
+          <span class="mx-1">·</span>
+          Pattern: <span class="text-yellow-300 font-mono">${PATTERN_LABEL[active] || active}</span>
         </div>
+        <div class="text-xs text-slate-500 mb-1">Channels</div>
+        <div class="flex gap-2 mb-3">
+          ${CHANNELS.map(c => `
+            <button onclick="setChannels(${l.id}, '${c}')"
+              class="${channels === c ? 'bg-blue-500 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'} text-xs px-2.5 py-1 rounded font-medium transition">
+              ${CHANNEL_ICON[c]} ${CHANNEL_LABEL[c]}
+            </button>
+          `).join('')}
+        </div>
+        <div class="text-xs text-slate-500 mb-1">Pattern</div>
         <div class="flex flex-wrap gap-2">
           ${PATTERNS.map(p => `
             <button onclick="setPattern(${l.id}, '${p}')"
@@ -430,6 +454,8 @@ function renderCombos() {
         <div>
           <div class="font-semibold">${escapeHtml(c.name)}</div>
           <div class="text-xs text-slate-400 mt-0.5">
+            ${CHANNEL_ICON[c.channels || 'both']} ${CHANNEL_LABEL[c.channels || 'both']}
+            <span class="mx-1">·</span>
             ${PATTERN_ICON[c.pattern] || '💡'} ${PATTERN_LABEL[c.pattern] || c.pattern}
             <span class="mx-1">·</span>
             ${escapeHtml(soundLabel(c.sound))}
@@ -474,6 +500,8 @@ function renderEvent(ev) {
   const ok = ev.arduino_ok ? '' : ' <span class="text-red-400">⚠ arduino unreachable</span>';
   const icon = PATTERN_ICON[ev.pattern] || '💡';
   const label = PATTERN_LABEL[ev.pattern] || ev.pattern || '?';
+  const ch = ev.channels || 'both';
+  const channelTag = `<span class="text-xs px-2 py-0.5 rounded border bg-slate-700/40 text-slate-300 border-slate-600 font-mono">${CHANNEL_ICON[ch]} ${CHANNEL_LABEL[ch]}</span>`;
   const comboTag = ev.combo ? `<span class="text-xs px-2 py-0.5 rounded border bg-purple-500/20 text-purple-300 border-purple-500/40 font-mono">combo: ${escapeHtml(ev.combo.name)}</span>` : '';
   const item = document.createElement('div');
   item.className = 'bg-slate-800 border border-slate-700 rounded p-3 text-sm';
@@ -484,6 +512,7 @@ function renderEvent(ev) {
     </div>
     <div class="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
       ${sourceBadge(ev.source)}
+      ${channelTag}
       ${comboTag}
       <span class="font-mono">${ev.source_ip || ''}</span>
     </div>`;
@@ -498,6 +527,18 @@ async function setPattern(id, pattern) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Source': 'dashboard' },
     body: JSON.stringify({ pattern }),
+  });
+}
+
+// Re-apply the current pattern on the chosen channels — channel changes only
+// have a visible effect when something is actually running.
+async function setChannels(id, channels) {
+  const light = lights.find(l => l.id === id);
+  const pattern = light?.pattern || 'off';
+  await fetch(`${API_BASE}/api/lights/${id}/pattern`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Source': 'dashboard' },
+    body: JSON.stringify({ pattern, channels }),
   });
 }
 
@@ -611,6 +652,13 @@ PATTERNS.forEach(p => {
   opt.value = p; opt.textContent = PATTERN_LABEL[p];
   comboPatternEl.appendChild(opt);
 });
+const comboChannelsEl = document.getElementById('combo-channels');
+CHANNELS.forEach(c => {
+  const opt = document.createElement('option');
+  opt.value = c; opt.textContent = `${CHANNEL_ICON[c]} ${CHANNEL_LABEL[c]}`;
+  comboChannelsEl.appendChild(opt);
+});
+comboChannelsEl.value = 'both';
 SOUND_PRESETS.forEach(p => {
   const opt = document.createElement('option');
   opt.value = p; opt.textContent = p;
@@ -726,6 +774,7 @@ cancelComboBtn.addEventListener('click', () => {
   comboForm.classList.add('hidden');
   newComboBtn.classList.remove('hidden');
   comboForm.reset();
+  comboChannelsEl.value = 'both';
   toggleSoundInputs();
 });
 
@@ -738,6 +787,7 @@ comboForm.addEventListener('submit', async (e) => {
   comboError.textContent = '';
   const name = document.getElementById('combo-name').value.trim();
   const pattern = comboPatternEl.value;
+  const channels = comboChannelsEl.value;
   const type = document.querySelector('input[name="sound-type"]:checked').value;
   let value = '';
   if (type === 'preset')  value = soundPresetEl.value;
@@ -752,7 +802,7 @@ comboForm.addEventListener('submit', async (e) => {
     const r = await fetch(`${API_BASE}/api/combos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, pattern, sound: { type, value } }),
+      body: JSON.stringify({ name, pattern, channels, sound: { type, value } }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
@@ -760,6 +810,7 @@ comboForm.addEventListener('submit', async (e) => {
       return;
     }
     comboForm.reset();
+    comboChannelsEl.value = 'both';
     toggleSoundInputs();
     comboForm.classList.add('hidden');
     newComboBtn.classList.remove('hidden');
